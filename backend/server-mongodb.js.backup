@@ -1,0 +1,824 @@
+import express from "express";
+import cors from "cors";
+import dotenv from "dotenv";
+import cron from "node-cron";
+import fs from "fs/promises";
+import path from "path";
+import { fileURLToPath } from "url";
+
+// MongoDB imports
+import { initializeMongoDB, mongoHealthCheck } from './mongodb-setup.js';
+import {
+  storeArticlesMongo,
+  getArticlesMongo,
+  storeGameSubmissionMongo,
+  getGameScoresMongo,
+  storeJobPostingsMongo,
+  getCachedJobPostingsMongo,
+  storeUserRatingMongo,
+  getUserRatingsMongo,
+  trackUserInteractionMongo,
+  logApiUsageMongo
+} from './mongodb-operations.js';
+import {
+  getArticles,
+  isPostgresAvailable,
+  initializePool,
+  fetchCountryNewsRows,
+  fetchLatestJobAnalytics,
+} from './database.js';
+
+// Import route handlers
+import translationRoutes from './routes/translation-routes.js';
+import websiteChatRoutes from './routes/website-chat-routes.js';
+import cryptoTreasuryRoutes from './routes/crypto-treasury-routes.js';
+import jobSearchRoutes from './routes/job-search-routes.js';
+import aiJobImpactRoutes from './routes/ai-job-impact-routes.js';
+import caiCareerRoutes from './routes/cai-career-routes.js';
+
+dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const STATIC_DATA_DIR = path.resolve(__dirname, 'data');
+const STATIC_COUNTRY_FILES = new Map([
+  ['US', 'US-articles.json'],
+  ['CN', 'CN-articles.json'],
+  ['GB', 'GB-articles.json'],
+  ['DE', 'DE-articles.json'],
+  ['FR', 'FR-articles.json'],
+  ['JP', 'JP-articles.json'],
+  ['KR', 'KR-articles.json'],
+  ['IN', 'IN-articles.json'],
+  ['CA', 'CA-articles.json'],
+  ['ES', 'ES-articles.json']
+]);
+
+const DEFAULT_SEED_COUNTRIES = (
+  process.env.MONGO_SEED_COUNTRIES?.split(',').map(code => code.trim().toUpperCase()).filter(Boolean)
+  || ['US', 'CN', 'GB', 'DE', 'FR', 'JP', 'KR', 'IN', 'CA', 'ES', 'BR', 'IT', 'AU']
+);
+const DEFAULT_SEED_LIMIT = Number.parseInt(process.env.MONGO_SEED_LIMIT || '250', 10);
+const SEED_RETRY_INTERVAL_MS = Number.parseInt(process.env.MONGO_SEED_RETRY_MS || '60000', 10);
+
+const staticDataCache = new Map();
+let seedInFlight = null;
+let lastSeedAttempt = 0;
+
+const app = express();
+const PORT = process.env.PORT || 8080; // Azure uses port 8080
+
+const COUNTRY_NEWS_CATEGORIES = new Set(["technology", "ai", "startups", "companies"]);
+
+function mergeArticles(primary = [], secondary = []) {
+  const combined = [];
+  const seen = new Set();
+
+  const pushArticle = (article) => {
+    if (!article) return;
+
+    const key = article.url || article.id || `${article.title}-${article.publishedAt}`;
+    if (key) {
+      if (seen.has(key)) return;
+      seen.add(key);
+    }
+
+    combined.push(article);
+  };
+
+  primary.forEach(pushArticle);
+  secondary.forEach(pushArticle);
+
+  return combined;
+}
+
+async function fetchArticlesFromDatabases(country = null, limit = 500) {
+  const sources = new Set();
+  let mongoArticles = [];
+
+  try {
+    mongoArticles = await getArticlesMongo(country, limit);
+    if (mongoArticles.length > 0) {
+      sources.add("mongodb-atlas");
+    }
+  } catch (error) {
+    console.warn("⚠️ MongoDB article fetch failed:", error.message);
+  }
+
+  let postgresArticles = [];
+  if (isPostgresAvailable()) {
+    try {
+      postgresArticles = await getArticles(country, limit);
+      if (postgresArticles.length > 0) {
+        sources.add("postgresql-railway");
+      }
+    } catch (error) {
+      console.warn("⚠️ PostgreSQL article fetch failed:", error.message);
+    }
+  }
+
+  const sortedArticles = mergeArticles(mongoArticles, postgresArticles)
+    .sort((a, b) => {
+      const dateA = new Date(a.publishedAt || a.published_at || 0).getTime();
+      const dateB = new Date(b.publishedAt || b.published_at || 0).getTime();
+      return dateB - dateA;
+    })
+    .slice(0, limit);
+
+  return { articles: sortedArticles, sources: Array.from(sources) };
+}
+
+async function loadStaticDataForCountry(country) {
+  const upper = (country || '').toUpperCase();
+  if (!STATIC_COUNTRY_FILES.has(upper)) {
+    return [];
+  }
+
+  if (!staticDataCache.has(upper)) {
+    const fileName = STATIC_COUNTRY_FILES.get(upper);
+    const filePath = path.join(STATIC_DATA_DIR, fileName);
+
+    try {
+      const fileContents = await fs.readFile(filePath, 'utf-8');
+      const parsed = JSON.parse(fileContents);
+      const records = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.articles) ? parsed.articles : [];
+
+      const normalized = records.map((article, index) => ({
+        id: article.id || `${upper.toLowerCase()}-static-${index}`,
+        title: article.title,
+        description: article.description,
+        url: article.url,
+        source: article.source,
+        author: article.author,
+        publishedAt: article.publishedAt || article.published_at || null,
+        country: article.country || upper,
+        category: article.category || 'ai',
+        relScore: article.relScore ?? article.rel_score ?? null,
+        anaScore: article.anaScore ?? article.ana_score ?? null,
+        provenance: article.provenance || 'static-cache'
+      }));
+
+      staticDataCache.set(upper, normalized);
+    } catch (error) {
+      console.warn(`⚠️ Failed to load static dataset for ${upper}:`, error.message);
+      staticDataCache.set(upper, []);
+    }
+  }
+
+  return staticDataCache.get(upper);
+}
+
+async function seedMongoFromStaticData(targetCountries, limit) {
+  let totalSeeded = 0;
+
+  for (const countryCode of targetCountries) {
+    const articles = await loadStaticDataForCountry(countryCode);
+    if (!articles.length) continue;
+
+    const batch = articles.slice(0, limit);
+    const result = await storeArticlesMongo(countryCode, batch);
+    totalSeeded += (result.storedCount || 0) + (result.updatedCount || 0);
+  }
+
+  return totalSeeded;
+}
+
+async function seedMongoFromPostgres(targetCountries, limit) {
+  const countries = targetCountries && targetCountries.length > 0 ? targetCountries : DEFAULT_SEED_COUNTRIES;
+
+  if (!isPostgresAvailable()) {
+    const initialized = await initializePool();
+    if (!initialized) {
+      return 0;
+    }
+  }
+
+  let totalSeeded = 0;
+
+  for (const countryCode of countries) {
+    try {
+      const articles = await getArticles(countryCode, limit);
+      if (!articles.length) continue;
+
+      const result = await storeArticlesMongo(countryCode, articles);
+      totalSeeded += (result.storedCount || 0) + (result.updatedCount || 0);
+    } catch (error) {
+      console.warn(`⚠️ Failed to sync ${countryCode} articles from PostgreSQL:`, error.message);
+    }
+  }
+
+  if (totalSeeded === 0) {
+    try {
+      const globalArticles = await getArticles(null, limit);
+      if (globalArticles.length > 0) {
+        const grouped = new Map();
+
+        for (const article of globalArticles) {
+          const countryCode = (article.country || 'GLOBAL').toUpperCase();
+          if (!grouped.has(countryCode)) {
+            grouped.set(countryCode, []);
+          }
+          grouped.get(countryCode).push(article);
+        }
+
+        for (const [countryCode, group] of grouped.entries()) {
+          const batch = group.slice(0, limit);
+          const result = await storeArticlesMongo(countryCode, batch);
+          totalSeeded += (result.storedCount || 0) + (result.updatedCount || 0);
+        }
+      }
+    } catch (error) {
+      console.warn('⚠️ Failed to seed MongoDB from PostgreSQL global dataset:', error.message);
+    }
+  }
+
+  return totalSeeded;
+}
+
+async function ensureArticlesAvailable(country, limit) {
+  const now = Date.now();
+  if (seedInFlight) {
+    await seedInFlight;
+    return;
+  }
+
+  if (now - lastSeedAttempt < SEED_RETRY_INTERVAL_MS) {
+    return;
+  }
+
+  seedInFlight = (async () => {
+    try {
+      const targetCountry = country ? country.toUpperCase() : null;
+      const existing = await getArticlesMongo(targetCountry, 1);
+      if (existing.length > 0) {
+        return;
+      }
+
+      console.log('🛠️ MongoDB article cache empty, attempting to seed data...');
+
+      const targetCountries = targetCountry ? [targetCountry] : DEFAULT_SEED_COUNTRIES;
+      let seeded = await seedMongoFromPostgres(targetCountries, limit);
+
+      if (seeded > 0) {
+        console.log(`✅ Seeded ${seeded} articles from PostgreSQL into MongoDB.`);
+        return;
+      }
+
+      const staticSeedCountries = targetCountry
+        ? (STATIC_COUNTRY_FILES.has(targetCountry) ? [targetCountry] : [])
+        : Array.from(STATIC_COUNTRY_FILES.keys());
+
+      if (staticSeedCountries.length > 0) {
+        seeded = await seedMongoFromStaticData(staticSeedCountries, limit);
+        if (seeded > 0) {
+          console.log(`✅ Seeded ${seeded} fallback articles into MongoDB.`);
+          return;
+        }
+      }
+
+      console.warn('⚠️ No seed data available for MongoDB - responses may be empty.');
+    } finally {
+      lastSeedAttempt = Date.now();
+    }
+  })();
+
+  try {
+    await seedInFlight;
+  } finally {
+    seedInFlight = null;
+  }
+}
+
+async function loadCombinedArticles(country = null, limit = 500) {
+  const initial = await fetchArticlesFromDatabases(country, limit);
+  if (initial.articles.length > 0) {
+    return initial;
+  }
+
+  await ensureArticlesAvailable(country, limit);
+
+  return await fetchArticlesFromDatabases(country, limit);
+}
+
+// CORS configuration for Azure deployment
+app.use(
+  cors({
+    origin: [
+      "https://ai-intelligence-network.azurewebsites.net",
+      "http://localhost:5173",
+      "http://localhost:3000",
+      "https://localhost:3000"
+    ],
+    credentials: true,
+    methods: ["GET", "POST", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
+
+app.options("*", cors());
+app.use(express.json());
+
+// Mount route handlers
+app.use('/api/translation', translationRoutes);
+app.use('/api/website-chat', websiteChatRoutes);
+app.use('/api/jobs', jobSearchRoutes);
+app.use('/api/cai-career', caiCareerRoutes);
+app.use('/api/ai-job-impact', aiJobImpactRoutes);
+app.use('/api/crypto-treasury', cryptoTreasuryRoutes);
+
+// Health check endpoint
+app.get("/health", async (_, res) => {
+  try {
+    const mongoStatus = await mongoHealthCheck();
+    const memUsage = process.memoryUsage();
+    
+    res.status(200).json({
+      ok: true,
+      service: "AI Intelligence Network",
+      ts: new Date().toISOString(),
+      status: "OPERATIONAL",
+      uptime: Math.floor(process.uptime()),
+      port: PORT,
+      env: process.env.NODE_ENV || "production",
+      database: {
+        type: "MongoDB Atlas",
+        status: mongoStatus.status,
+        database: mongoStatus.database,
+        collections: mongoStatus.collections,
+        dataSize: mongoStatus.dataSize
+      },
+      memory: {
+        rss: Math.round(memUsage.rss / 1024 / 1024) + "MB",
+        heapUsed: Math.round(memUsage.heapUsed / 1024 / 1024) + "MB",
+        heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024) + "MB",
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      ok: false,
+      error: error.message,
+      ts: new Date().toISOString(),
+    });
+  }
+});
+
+app.get("/api/country/:country/news", async (req, res) => {
+  if (!isPostgresAvailable()) {
+    return res.status(503).json({
+      success: false,
+      country: req.params.country?.toUpperCase?.() || "",
+      message: "PostgreSQL unavailable",
+    });
+  }
+
+  const { country } = req.params;
+  const categoryParam = typeof req.query.category === "string" ? req.query.category.toLowerCase() : null;
+  const limitParam = typeof req.query.limit === "string" ? Number.parseInt(req.query.limit, 10) : undefined;
+
+  const category = categoryParam && COUNTRY_NEWS_CATEGORIES.has(categoryParam) ? categoryParam : null;
+  if (categoryParam && !category) {
+    return res.status(400).json({
+      success: false,
+      message: "Unsupported category",
+      allowedCategories: Array.from(COUNTRY_NEWS_CATEGORIES),
+    });
+  }
+
+  try {
+    const items = await fetchCountryNewsRows(country, {
+      category,
+      limit: limitParam,
+    });
+
+    if (!items) {
+      return res.status(404).json({
+        success: false,
+        message: "Country not configured",
+      });
+    }
+
+    return res.json({
+      success: true,
+      country: country.toUpperCase(),
+      category: category || "all",
+      items,
+      count: items.length,
+      source: "postgresql",
+      lastUpdate: new Date().toISOString(),
+    });
+  } catch (error) {
+    if (error.code === "INVALID_COUNTRY_CODE") {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid country code",
+      });
+    }
+
+    console.error("❌ Country news feed failed:", error.message);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to load country news",
+    });
+  }
+});
+
+app.get("/api/country/:country/analytics", async (req, res) => {
+  if (!isPostgresAvailable()) {
+    return res.status(503).json({
+      success: false,
+      country: req.params.country?.toUpperCase?.() || "",
+      message: "PostgreSQL unavailable",
+    });
+  }
+
+  try {
+    const analytics = await fetchLatestJobAnalytics(req.params.country);
+    if (!analytics) {
+      return res.status(404).json({
+        success: false,
+        message: "No analytics available",
+      });
+    }
+
+    return res.json({ success: true, ...analytics });
+  } catch (error) {
+    if (error.code === "INVALID_COUNTRY_CODE") {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid country code",
+      });
+    }
+
+    console.error("❌ Country analytics failed:", error.message);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to load analytics",
+    });
+  }
+});
+
+// Database test endpoint
+app.get("/api/test", async (req, res) => {
+  try {
+    const mongoStatus = await mongoHealthCheck();
+    const articles = await getArticlesMongo(null, 10);
+
+    res.json({
+      message: "MongoDB connected!",
+      serverTime: new Date().toISOString(),
+      articleCount: articles.length,
+      databaseStatus: mongoStatus,
+      mongoUri: process.env.MONGODB_URI ? "CONFIGURED" : "MISSING",
+    });
+  } catch (err) {
+    console.error("Database test failed:", err);
+    res.status(500).json({
+      error: "Database connection failed",
+      details: err.message,
+      mongoUri: process.env.MONGODB_URI ? "CONFIGURED" : "MISSING",
+    });
+  }
+});
+
+// Global news endpoint
+app.get("/api/global-news", async (_, res) => {
+  try {
+    console.log("📡 Global news request - fetching from databases...");
+
+    const { articles, sources } = await loadCombinedArticles(null, 500);
+    console.log(
+      `📊 Combined ${articles.length} articles from ${
+        sources.length > 0 ? sources.join(", ") : "no data sources"
+      }`
+    );
+
+    // Group articles by country
+    const countriesWithNews = {};
+    const globalArticles = [];
+
+    articles.forEach((article) => {
+      if (article.country && article.country !== "GLOBAL") {
+        if (!countriesWithNews[article.country]) {
+          countriesWithNews[article.country] = [];
+        }
+        countriesWithNews[article.country].push(article);
+      } else {
+        globalArticles.push(article);
+      }
+    });
+
+    res.json({
+      success: true,
+      countries: countriesWithNews,
+      global: globalArticles,
+      totalArticles: articles.length,
+      lastUpdate: new Date().toISOString(),
+      source: sources.length > 0 ? sources.join(",") : "none",
+    });
+  } catch (error) {
+    console.error("Failed to get global news:", error.message);
+    res.status(500).json({
+      success: false,
+      error: "Service unavailable",
+      message: error.message,
+    });
+  }
+});
+
+// Country-specific news endpoint
+app.get("/api/country-news/:country", async (req, res) => {
+  try {
+    const country = req.params.country.toUpperCase();
+    console.log(`📡 Fetching news for ${country} from databases...`);
+
+    let { articles, sources } = await loadCombinedArticles(country, 300);
+    console.log(
+      `📊 ${country}: Retrieved ${articles.length} articles from ${
+        sources.length > 0 ? sources.join(", ") : "no data sources"
+      }`
+    );
+
+    // Smart filtering if no direct articles found
+    if (articles.length === 0) {
+      console.log(`🔍 ${country}: No direct articles, using smart filtering...`);
+
+      const fallback = await loadCombinedArticles(null, 1000);
+      const allArticles = fallback.articles;
+      if (fallback.sources.length > 0) {
+        sources = Array.from(new Set([...sources, ...fallback.sources]));
+      }
+
+      const countryKeywords = {
+        IN: ["india", "indian", "mumbai", "delhi", "bangalore"],
+        BR: ["brazil", "brazilian", "sao paulo", "rio"],
+        IT: ["italy", "italian", "rome", "milan"],
+        AU: ["australia", "australian", "sydney", "melbourne"],
+        CN: ["china", "chinese", "beijing", "shanghai", "shenzhen"],
+        // Add more as needed
+      };
+
+      const keywords = countryKeywords[country] || [country.toLowerCase()];
+      
+      articles = allArticles.filter((article) => {
+        const title = article.title?.toLowerCase() || "";
+        const description = article.description?.toLowerCase() || "";
+        const content = title + " " + description;
+        return keywords.some((keyword) => content.includes(keyword));
+      }).slice(0, 20);
+    }
+
+    res.json({
+      success: true,
+      country: country,
+      articles: articles,
+      count: articles.length,
+      source: sources.length > 0 ? sources.join(",") : "none",
+      lastUpdate: new Date().toISOString(),
+    });
+
+    console.log(`✅ ${country}: Served ${articles.length} articles to client`);
+  } catch (error) {
+    console.error(`❌ Country news failed for ${req.params.country}:`, error.message);
+    res.json({
+      success: false,
+      country: req.params.country.toUpperCase(),
+      articles: [],
+      count: 0,
+      source: "error",
+      error: error.message,
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+// Game submission endpoint
+app.post("/api/game/submit", async (req, res) => {
+  try {
+    const { url, country } = req.body;
+    const userIp = req.ip || req.connection.remoteAddress;
+    const userId = req.body.userId || `user-${Date.now()}`;
+
+    if (!url || !country) {
+      return res.status(400).json({
+        success: false,
+        error: "URL and country are required"
+      });
+    }
+
+    const submission = {
+      url,
+      country: country.toUpperCase(),
+      userId,
+      userIp,
+      points: 1
+    };
+
+    const result = await storeGameSubmissionMongo(submission);
+
+    if (result.success) {
+      // Track interaction
+      await trackUserInteractionMongo({
+        userId,
+        userIp,
+        type: 'game_submission',
+        targetType: 'country',
+        targetId: country,
+        metadata: { url, points: result.points }
+      });
+
+      res.json({
+        success: true,
+        message: "Submission recorded!",
+        points: result.points,
+        country: country.toUpperCase()
+      });
+    } else {
+      res.status(400).json(result);
+    }
+  } catch (error) {
+    console.error("Game submission failed:", error.message);
+    res.status(500).json({
+      success: false,
+      error: "Submission failed",
+      details: error.message
+    });
+  }
+});
+
+// Game leaderboard endpoint
+app.get("/api/game/leaderboard", async (req, res) => {
+  try {
+    const scores = await getGameScoresMongo();
+    
+    // Convert to leaderboard format
+    const leaderboard = Object.entries(scores)
+      .map(([country, data]) => ({
+        country,
+        score: data.score,
+        submissions: data.totalSubmissions,
+        lastSubmission: data.lastSubmission
+      }))
+      .sort((a, b) => b.score - a.score);
+
+    res.json({
+      success: true,
+      leaderboard,
+      totalCountries: leaderboard.length,
+      lastUpdate: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error("Failed to get leaderboard:", error.message);
+    res.status(500).json({
+      success: false,
+      error: "Failed to get leaderboard",
+      details: error.message
+    });
+  }
+});
+
+// Article rating endpoint
+app.post("/api/article/:id/rate", async (req, res) => {
+  const { id } = req.params;
+  const { relScore, anaScore, overallRating, feedbackText } = req.body;
+  const userId = req.body.userId || `user-${Date.now()}`;
+  const userIp = req.ip || req.connection.remoteAddress;
+
+  try {
+    const validatedRelScore = Math.max(0, Math.min(100, parseInt(relScore) || 0));
+    const validatedAnaScore = Math.max(0, Math.min(100, parseInt(anaScore) || 0));
+    const validatedOverallRating = Math.max(1, Math.min(5, parseInt(overallRating) || 3));
+
+    const rating = await storeUserRatingMongo({
+      articleId: id,
+      userId,
+      userIp,
+      relScore: validatedRelScore,
+      anaScore: validatedAnaScore,
+      overallRating: validatedOverallRating,
+      feedbackText: feedbackText || null,
+    });
+
+    const allRatings = await getUserRatingsMongo(id);
+
+    // Track interaction
+    await trackUserInteractionMongo({
+      userId,
+      userIp,
+      type: 'article_rating',
+      targetType: 'article',
+      targetId: id,
+      metadata: { relScore: validatedRelScore, anaScore: validatedAnaScore }
+    });
+
+    res.json({
+      success: true,
+      rating: {
+        articleId: id,
+        userId,
+        relScore: validatedRelScore,
+        anaScore: validatedAnaScore,
+        overallRating: validatedOverallRating,
+        timestamp: new Date().toISOString(),
+      },
+      articleStats: allRatings,
+      message: "Rating stored successfully in MongoDB!",
+    });
+  } catch (error) {
+    console.error("❌ Rating storage failed:", error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      fallback: "Rating system temporarily unavailable",
+    });
+  }
+});
+
+// Get article ratings
+app.get("/api/article/:id/ratings", async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const ratings = await getUserRatingsMongo(id);
+    res.json({
+      success: true,
+      userAverage: {
+        relScore: ratings.avgRelScore,
+        anaScore: ratings.avgAnaScore,
+      },
+      totalRatings: ratings.totalRatings,
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+// News refresh endpoint (for admin use)
+app.post("/api/refresh-news", async (req, res) => {
+  try {
+    console.log("🔄 Manual news refresh requested...");
+    
+    // This would typically fetch from your news APIs
+    // For now, return success message
+    res.json({
+      success: true,
+      message: "News refresh completed",
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error("News refresh failed:", error.message);
+    res.status(500).json({
+      success: false,
+      error: "News refresh failed",
+      details: error.message
+    });
+  }
+});
+
+// Schedule daily news refresh
+cron.schedule("0 6 * * *", async () => {
+  console.log("🌅 DAILY CRON: Starting scheduled news refresh at 6 AM...");
+  
+  try {
+    // Add your news fetching logic here
+    console.log("✅ DAILY CRON: News refresh completed");
+  } catch (error) {
+    console.error("❌ DAILY CRON FAILED:", error.message);
+  }
+});
+
+// Start server
+const server = app.listen(PORT, async () => {
+  console.log(`🛰️ AI Intelligence Network API running on port ${PORT}`);
+  console.log("✅ System operational - MongoDB Atlas Edition");
+
+  // Initialize MongoDB connection
+  try {
+    const mongoConnected = await initializeMongoDB();
+    if (mongoConnected) {
+      console.log("🎯 Ready for production deployment!");
+      try {
+        await ensureArticlesAvailable(null, DEFAULT_SEED_LIMIT);
+      } catch (seedError) {
+        console.warn("⚠️ Initial MongoDB seeding attempt failed:", seedError.message);
+      }
+    } else {
+      console.warn("⚠️ MongoDB connection failed - running in degraded mode");
+    }
+  } catch (error) {
+    console.warn("⚠️ MongoDB initialization failed:", error.message);
+  }
+});
+
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  console.log('SIGTERM received, shutting down gracefully');
+  server.close(() => {
+    console.log('Process terminated');
+  });
+});
+
+export default app;

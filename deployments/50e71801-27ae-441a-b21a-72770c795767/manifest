@@ -1,0 +1,23 @@
+
+backend
+backend/server.js
+backend/package.json
+backend/package-lock.json
+web.config
+frontend
+frontend/vite.svg
+frontend/assets
+frontend/assets/index-_gFRsQUk 2.css
+frontend/assets/index-CnbULImA.js
+frontend/assets/index-CnbULImA 2.js
+frontend/assets/TRIPPYTOKEN.svg
+frontend/assets/index-D6Py_45V.js
+frontend/assets/index-_gFRsQUk.css
+frontend/assets/index-5vjZCY-Q.css
+frontend/test-connection.html
+frontend/TRIPPYTOKEN.png
+frontend/index.html
+frontend/debug.html
+frontend/test-api.html
+frontend/translation-injector.js
+startup.sh

@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+body { background: red !important; color: white !important; font-size: 20px !important; padding: 20px !important; }
+canvas { border: 2px solid white; }
+</style>
+</head>
+<body>
+<h1>🎮 HARDWARE ACCELERATION TEST</h1>
+<canvas id="webgl-test" width="400" height="300"></canvas>
+<div id="result"></div>
+<script>
+const canvas = document.getElementById('webgl-test');
+const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+
+if (gl) {
+  gl.clearColor(0.0, 1.0, 0.0, 1.0);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  document.getElementById('result').innerHTML = '✅ WebGL working - Hardware acceleration OK';
+} else {
+  document.getElementById('result').innerHTML = '❌ WebGL failed - Hardware acceleration issue!';
+}
+</script>
+</body>
+</html>

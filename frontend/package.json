@@ -1,0 +1,44 @@
+{
+  "name": "ai-intelligence-frontend",
+  "version": "1.0.0",
+  "description": "AI Intelligence Network - React Dashboard",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "build:frontend": "vite build",
+    "vercel-build": "vite build",
+    "preview": "vite preview",
+    "deploy": "npm run build && vercel --prod",
+    "test": "echo 'Tests not configured yet'",
+    "lint": "echo 'Linting not configured yet'",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@jridgewell/gen-mapping": "^0.3.13",
+    "@rolldown/pluginutils": "^1.0.0-beta.44",
+    "axios": "^1.7.4",
+    "chart.js": "^4.5.1",
+    "framer-motion": "^10.18.0",
+    "lucide-react": "^0.548.0",
+    "motion-utils": "^12.23.6",
+    "react": "^18.3.1",
+    "react-chartjs-2": "^5.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.2"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.79",
+    "@types/react-dom": "^18.2.25",
+    "@vitejs/plugin-react": "^4.2.1",
+    "vite": "^5.4.21"
+  },
+  "engines": {
+    "node": "22.x",
+    "npm": ">=10.0.0"
+  },
+  "overrides": {
+    "rollup": "^4.0.0"
+  }
+}

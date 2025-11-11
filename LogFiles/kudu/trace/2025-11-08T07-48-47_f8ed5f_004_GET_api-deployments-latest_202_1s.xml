@@ -1,0 +1,9 @@
+<step title="Incoming Request" date="2025-11-08T07:48:47.843" instance="f8ed5f" url="/api/deployments/latest" method="GET" type="request" pid="830,1,14" Accept="*/*" Host="cai-news-cwb3aebqdze3d2f0.scm.westus-01.azurewebsites.net" User-Agent="AZURECLI/2.78.0 (HOMEBREW)" Accept-Encoding="gzip, deflate" Authorization="Bas..." x-ms-client-request-id="552fbf22-bc77-11f0-9ee7-9aa26e10bd9c" X-ARR-LOG-ID="552fbf22-bc77-11f0-9ee7-9aa26e10bd9c" CLIENT-IP="137.103.49.21:50122" X-SITE-DEPLOYMENT-ID="cai-news" WAS-DEFAULT-HOSTNAME="cai-news-cwb3aebqdze3d2f0.scm.westus-01.azurewebsites.net" X-Forwarded-Proto="https" X-AppService-Proto="https" X-Forwarded-TlsVersion="1.3" X-WAWS-Unencoded-URL="/api/deployments/latest" X-Client-IP="137.103.49.21" X-Client-Port="50122" >
+  <step title="Cleanup Xml Logs" date="2025-11-08T07:48:47.845" /><!-- duration: 4ms -->
+  <step title="DeploymentService.GetResult" date="2025-11-08T07:48:47.905" >
+    <step title="DeploymentService.GetLatestDeployment" date="2025-11-08T07:48:47.922" >
+      <step title="DeploymentManager.GetResults" date="2025-11-08T07:48:47.925" /><!-- duration: 477ms -->
+    </step><!-- duration: 489ms -->
+  </step><!-- duration: 510ms -->
+  <step title="Outgoing response" date="2025-11-08T07:48:48.442" type="response" statusCode="202" statusText="Accepted" /><!-- duration: 4ms -->
+</step><!-- duration: 613ms -->

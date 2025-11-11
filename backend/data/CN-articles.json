@@ -1,0 +1,80 @@
+[
+  {
+    "id": "newsapi-1761120000507-3",
+    "title": "China's AI ambitions target US tech dominance",
+    "url": "https://www.dw.com/en/china-artificial-intelligence-deepseek-us-technology-semiconductors-chatgpt-graphics/a-74361630",
+    "source": "DW (English)",
+    "author": "Nik Martin",
+    "publishedAt": "2025-10-21T07:43:00Z",
+    "description": "China aims to lead global artificial intelligence by 2030, with its AI platforms now nearly matching US capabilities. But without top-tier chips and free expression, can Beijing really win the race? Artificial intelligence (AI) is the new currency of global p…",
+    "country": "CN",
+    "category": "ai",
+    "relScore": 85,
+    "anaScore": 85
+  },
+  {
+    "id": "newsapi-1761120000508-26",
+    "title": "Goldman Sachs flags risk of disruption in supply of rare earths, key minerals",
+    "url": "https://www.thehindubusinessline.com/news/goldman-sachs-flags-risk-of-disruption-in-supply-of-rare-earths-key-minerals/article70185341.ece",
+    "source": "BusinessLine",
+    "author": "Reuters",
+    "publishedAt": "2025-10-21T05:51:56Z",
+    "description": "Goldman Sachs warns of supply chain risks for rare earths, highlighting China's dominance and potential export curbs impacting global industries.",
+    "country": "CN",
+    "category": "ai",
+    "relScore": 85,
+    "anaScore": 75
+  },
+  {
+    "id": "newsapi-1761120002740-1",
+    "title": "China AI Chip and AI Data Centers Versus US AI Data Centers",
+    "url": "https://www.nextbigfuture.com/2025/10/china-ai-chip-and-ai-data-centers-versus-us-ai-data-centers.html",
+    "source": "Next Big Future",
+    "author": "Brian Wang",
+    "publishedAt": "2025-10-21T01:09:38Z",
+    "description": "The US and its hyperscalers are spending more money on AI and AI data centers. The US hyperscalers have huge capacity for $400 billion on capital expenditure and hundreds of billion on research. The US hyperscalers have more free cashflow to expand AI investm…",
+    "country": "CN",
+    "category": "ai",
+    "relScore": 85,
+    "anaScore": 85
+  },
+  {
+    "id": "newsapi-1761120003866-9",
+    "title": "China DNA Sequencing Research Report 2025: Market to Reach $3.1 Billion by 2030, Dominated by BGI, Novogene, Berry Genomics, Annoroad Gene Technology, and Burning Rock Dx",
+    "url": "https://www.globenewswire.com/news-release/2025/10/20/3169565/28124/en/China-DNA-Sequencing-Research-Report-2025-Market-to-Reach-3-1-Billion-by-2030-Dominated-by-BGI-Novogene-Berry-Genomics-Annoroad-Gene-Technology-and-Burning-Rock-Dx.html",
+    "source": "GlobeNewswire",
+    "author": "Research and Markets",
+    "publishedAt": "2025-10-20T14:45:00Z",
+    "description": "The Chinese DNA sequencing market is expanding rapidly due to rising demand for precision medicine, technological advancements, and government investments. Key opportunities lie in oncology diagnostics, reproductive health, infectious disease surveillance, an…",
+    "country": "CN",
+    "category": "business",
+    "relScore": 75,
+    "anaScore": 85
+  },
+  {
+    "id": "newsapi-1761120002740-22",
+    "title": "Lithium Battery Fire Aboard Air China Flight Forces an Emergency Landing",
+    "url": "https://biztoc.com/x/a84d0d1ec966fc58",
+    "source": "Biztoc.com",
+    "author": "nytimes.com",
+    "publishedAt": "2025-10-18T18:28:58Z",
+    "description": "",
+    "country": "CN",
+    "category": "ai",
+    "relScore": 85,
+    "anaScore": 75
+  },
+  {
+    "id": "newsapi-1761120001620-12",
+    "title": "BNB Outperforms Wide Market on Growing RWA Adoption, Potential Coinbase Listing",
+    "url": "https://www.coindesk.com/markets/2025/10/18/bnb-outperforms-wide-market-on-growing-rwa-adoption-potential-coinbase-listing",
+    "source": "CoinDesk",
+    "author": "CD Analytics, Francisco Rodrigues",
+    "publishedAt": "2025-10-18T16:03:56Z",
+    "description": "The token's price action is driven partly by Coinbase considering BNB for a listing and China Merchants Bank International tokenizing a MMF on the BNB Chain.",
+    "country": "CN",
+    "category": "ai",
+    "relScore": 85,
+    "anaScore": 85
+  }
+]

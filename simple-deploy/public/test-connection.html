@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API Connection Test</title>
+</head>
+<body>
+    <h1>Testing API Connection</h1>
+    <div id="results"></div>
+    
+    <script>
+        const API_BASE = "http://localhost:3000";
+        
+        async function testConnection() {
+            const results = document.getElementById('results');
+            
+            try {
+                console.log('Testing:', API_BASE + '/api/global-news');
+                const response = await fetch(API_BASE + '/api/global-news');
+                const data = await response.json();
+                
+                results.innerHTML = `
+                    <h2>✅ SUCCESS!</h2>
+                    <p>Total Articles: ${data.totalArticles}</p>
+                    <p>Countries: ${Object.keys(data.countries || {}).join(', ')}</p>
+                    <p>Global Articles: ${data.global?.length || 0}</p>
+                    <pre>${JSON.stringify(data, null, 2).substring(0, 500)}...</pre>
+                `;
+            } catch (error) {
+                results.innerHTML = `
+                    <h2>❌ FAILED!</h2>
+                    <p>Error: ${error.message}</p>
+                    <p>API URL: ${API_BASE}</p>
+                `;
+            }
+        }
+        
+        testConnection();
+    </script>
+</body>
+</html>

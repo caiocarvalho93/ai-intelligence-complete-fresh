@@ -1,0 +1,14 @@
+// The production server with MongoDB/PostgreSQL integration lives in
+// `server-mongodb.js`.  Azure Static Web Apps points to this file via the
+// `start` script, so we simply import it here to bootstrap the full API.
+//
+// This keeps the historical entrypoint intact while ensuring the rich
+// MongoDB-backed routes, caching, and seeding logic execute for every
+// deployment target.
+
+import "./server-mongodb.js";
+
+// Re-export the Express app for tests that still import from server.js.
+// `server-mongodb.js` already calls `app.listen`, so importing it here will
+// start the HTTP server as a side effect.
+export { default } from "./server-mongodb.js";

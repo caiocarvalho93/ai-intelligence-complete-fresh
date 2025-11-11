@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>🚀 DIRECT DEBUG TEST</title>
+    <style>
+      body {
+        margin: 0;
+        background: linear-gradient(45deg, #ff0000, #00ff00, #0000ff) !important;
+        color: white !important;
+        font-size: 30px !important;
+        min-height: 100vh !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div style="text-align: center;">
+      <h1>🚀 DIRECT HTML TEST WORKING!</h1>
+      <p>If you see this colorful page, your browser works!</p>
+      <p>Time: <span id="time"></span></p>
+    </div>
+    <script>
+      document.getElementById('time').textContent = new Date().toLocaleTimeString();
+      console.log("🚀 Direct HTML test working!");
+    </script>
+  </body>
+</html>

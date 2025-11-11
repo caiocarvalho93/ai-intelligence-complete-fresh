@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>China Popup Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #000;
+            color: white;
+            padding: 20px;
+        }
+        .test-button {
+            background: linear-gradient(135deg, #ff1744, #d50000);
+            border: none;
+            color: white;
+            padding: 15px 30px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 18px;
+            font-weight: bold;
+            margin: 10px;
+        }
+        .test-button:hover {
+            transform: scale(1.05);
+        }
+        .log {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            font-family: monospace;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>🇨🇳 China Popup Debug Test</h1>
+    <p>This test simulates clicking on China to debug the popup issue.</p>
+    
+    <button class="test-button" onclick="testChinaPopup()">
+        🇨🇳 Click China (Test Popup)
+    </button>
+    
+    <button class="test-button" onclick="testFriendsVoteAPI()">
+        🎭 Test Friends Vote API
+    </button>
+    
+    <button class="test-button" onclick="testIntelligenceAPI()">
+        🧠 Test Intelligence API
+    </button>
+    
+    <button class="test-button" onclick="clearLog()">
+        🧹 Clear Log
+    </button>
+    
+    <div id="log" class="log"></div>
+
+    <script>
+        let logElement = document.getElementById('log');
+        
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            logElement.innerHTML += `[${timestamp}] ${message}<br>`;
+            logElement.scrollTop = logElement.scrollHeight;
+            console.log(message);
+        }
+        
+        function clearLog() {
+            logElement.innerHTML = '';
+        }
+        
+        async function testChinaPopup() {
+            log('🇨🇳 Testing China popup simulation...');
+            
+            // Simulate the exact data that would be passed to CountryAIJobImpactPanel
+            const chinaData = {
+                code: 'CN',
+                country: 'China',
+                consciousness: 92.4,
+                transcendence: 8.7
+            };
+            
+            log(`📊 China data: ${JSON.stringify(chinaData)}`);
+            
+            // Test the three main API calls that happen when popup opens
+            await Promise.all([
+                testFriendsVoteAPI('CN'),
+                testIntelligenceAPI('CN'),
+                testTourismAPI('CN')
+            ]);
+        }
+        
+        async function testFriendsVoteAPI(countryCode = 'CN') {
+            log(`🎭 Testing Friends Vote API for ${countryCode}...`);
+            
+            try {
+                const response = await fetch(`/api/friends-vote/${countryCode}`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    log(`✅ Friends Vote API success: ${JSON.stringify(data)}`);
+                } else {
+                    log(`❌ Friends Vote API failed: ${response.status} - ${JSON.stringify(data)}`);
+                }
+            } catch (error) {
+                log(`❌ Friends Vote API error: ${error.message}`);
+            }
+        }
+        
+        async function testIntelligenceAPI(countryCode = 'CN') {
+            log(`🧠 Testing Intelligence API for ${countryCode}...`);
+            
+            try {
+                const response = await fetch(`/api/intelligence/${countryCode}`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    log(`✅ Intelligence API success: ${JSON.stringify(data).substring(0, 200)}...`);
+                } else {
+                    log(`❌ Intelligence API failed: ${response.status} - ${JSON.stringify(data)}`);
+                }
+            } catch (error) {
+                log(`❌ Intelligence API error: ${error.message}`);
+            }
+        }
+        
+        async function testTourismAPI(countryCode = 'CN') {
+            log(`🏛️ Testing Tourism API for ${countryCode}...`);
+            
+            try {
+                // This would be called through the getCountryIntelligence function
+                log(`🏛️ Tourism API would be called via getCountryIntelligence...`);
+            } catch (error) {
+                log(`❌ Tourism API error: ${error.message}`);
+            }
+        }
+        
+        // Monitor for any global errors
+        window.addEventListener('error', (event) => {
+            log(`🚨 Global Error: ${event.error.message}`);
+        });
+        
+        // Monitor for unhandled promise rejections
+        window.addEventListener('unhandledrejection', (event) => {
+            log(`🚨 Unhandled Promise Rejection: ${event.reason}`);
+        });
+        
+        log('🔍 China Popup Debug Test loaded. Click the buttons to test!');
+    </script>
+</body>
+</html>
