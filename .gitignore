@@ -6,4 +6,5 @@ dist/
 build/
 .env
 .env.local
+.azure.env
 kiro-diagnostic-*.html

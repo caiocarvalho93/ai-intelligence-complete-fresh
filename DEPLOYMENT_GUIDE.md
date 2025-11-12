@@ -131,6 +131,37 @@ ALPHA_VANTAGE_API_KEY=your_alpha_vantage_key
 ALLOWED_ORIGIN=your_frontend_url
 ```
 
+### Running the Azure CLI script from your IDE
+
+The `deploy-azure.sh` script now loads secrets from your shell environment, so
+you can keep Azure production keys out of source control:
+
+1. Create a file named `.azure.env` in the project root (this file is ignored by
+   Git). Add the required secrets, for example:
+
+   ```bash
+   POSTGRES_PASSWORD="super-secret-password"
+   NEWS_API_KEY="..."
+   NEWSDATA_API_KEY="..."
+   NEWS_API_KEY_FALLBACK="..."
+   OPENAI_API_KEY="..."
+   GROK_API_KEY="..."
+   ALPHA_VANTAGE_API_KEY="..."
+   ALLOWED_ORIGIN="https://website-project-ai.vercel.app"
+   ```
+
+2. From your terminal or IDE, run:
+
+   ```bash
+   ./deploy-azure.sh
+   ```
+
+   The script automatically sources `.azure.env` (or a custom file specified via
+   `AZURE_ENV_FILE=/path/to/file ./deploy-azure.sh`) before contacting Azure.
+
+This keeps the deployment keys available locally while ensuring they never live
+inside the repository. Azure receives the values during the deployment step.
+
 ### Azure Startup Command
 
 In Azure Portal → Configuration → General settings:
