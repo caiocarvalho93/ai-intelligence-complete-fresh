@@ -5,6 +5,19 @@
 
 set -e
 
+# Optionally load secrets from a local env file. This lets you keep sensitive
+# values outside of version control while still running the script from your
+# IDE or terminal. The default file is ".azure.env", but you can override it by
+# setting AZURE_ENV_FILE before invoking the script.
+AZURE_ENV_FILE="${AZURE_ENV_FILE:-.azure.env}"
+if [ -f "$AZURE_ENV_FILE" ]; then
+  echo "🗂️  Loading secrets from $AZURE_ENV_FILE"
+  set -a
+  # shellcheck disable=SC1090
+  source "$AZURE_ENV_FILE"
+  set +a
+fi
+
 echo "🚀 Starting Azure Deployment..."
 
 # Variables
@@ -15,7 +28,7 @@ APP_NAME="ai-intelligence-fresh"
 POSTGRES_SERVER="ai-intelligence-db"
 POSTGRES_DB="ainews"
 POSTGRES_USER="aiuser"
-POSTGRES_PASSWORD="AINews2024!Secure"
+POSTGRES_PASSWORD="${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD before running this script}" 
 GITHUB_REPO="caiocarvalho93/ai-intelligence-complete-fresh"
 
 echo "📦 Resource Group: $RESOURCE_GROUP"
@@ -78,6 +91,17 @@ az webapp deployment source config \
   --branch main \
   --manual-integration
 
+# Required secret environment variables must already be exported where this
+# script is executed. This prevents accidental secret leakage in source
+# control.
+: "${NEWS_API_KEY:?Set NEWS_API_KEY before running this script}"
+: "${NEWSDATA_API_KEY:?Set NEWSDATA_API_KEY before running this script}"
+: "${NEWS_API_KEY_FALLBACK:?Set NEWS_API_KEY_FALLBACK before running this script}"
+: "${OPENAI_API_KEY:?Set OPENAI_API_KEY before running this script}"
+: "${GROK_API_KEY:?Set GROK_API_KEY before running this script}"
+: "${ALPHA_VANTAGE_API_KEY:?Set ALPHA_VANTAGE_API_KEY before running this script}"
+ALLOWED_ORIGIN="${ALLOWED_ORIGIN:-https://website-project-ai.vercel.app}"
+
 # Set environment variables
 echo "🔑 Setting environment variables..."
 az webapp config appsettings set \
@@ -85,13 +109,13 @@ az webapp config appsettings set \
   --resource-group $RESOURCE_GROUP \
   --settings \
     DATABASE_URL="$DATABASE_URL" \
-    NEWS_API_KEY="80880b6ccb1859033d4d0df5064fb12e" \
-    NEWSDATA_API_KEY="80880b6ccb1859033d4d0df5064fb12e" \
-    NEWS_API_KEY_FALLBACK="pub_da3a034d1d0e419892ff9574f0262f4c" \
-    OPENAI_API_KEY="your-openai-api-key-here" \
-    GROK_API_KEY="your-grok-api-key-here" \
-    ALPHA_VANTAGE_API_KEY="VQZ228GQKHENOZDD" \
-    ALLOWED_ORIGIN="https://website-project-ai.vercel.app" \
+    NEWS_API_KEY="$NEWS_API_KEY" \
+    NEWSDATA_API_KEY="$NEWSDATA_API_KEY" \
+    NEWS_API_KEY_FALLBACK="$NEWS_API_KEY_FALLBACK" \
+    OPENAI_API_KEY="$OPENAI_API_KEY" \
+    GROK_API_KEY="$GROK_API_KEY" \
+    ALPHA_VANTAGE_API_KEY="$ALPHA_VANTAGE_API_KEY" \
+    ALLOWED_ORIGIN="$ALLOWED_ORIGIN" \
     NODE_ENV="production" \
     PORT="8080" \
     SCM_DO_BUILD_DURING_DEPLOYMENT="true"
@@ -105,7 +129,9 @@ az webapp config set \
 
 # Store secrets in GitHub
 echo "🔐 Storing secrets in GitHub..."
-cd /Users/caifitness/Desktop/news-cai/ai-intelligence-complete-fresh
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+REPO_ROOT=$(cd "$SCRIPT_DIR" && git rev-parse --show-toplevel 2>/dev/null || echo "$SCRIPT_DIR")
+cd "$REPO_ROOT"
 gh secret set AZURE_DATABASE_URL --body "$DATABASE_URL"
 gh secret set AZURE_APP_NAME --body "$APP_NAME"
 gh secret set AZURE_RESOURCE_GROUP --body "$RESOURCE_GROUP"
